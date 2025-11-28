@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IST Precision Clock</title>
-    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
+    <link rel="apple-touch-icon" href="favicon.svg?v=2">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,7 +34,7 @@
             font-family: 'Outfit', sans-serif;
             overflow: hidden;
             cursor: none;
-            
+
             /* Very subtle gradient */
             background: radial-gradient(circle at center, #111111 0%, #000000 70%);
         }
@@ -121,20 +123,20 @@
             background: rgba(255, 255, 255, 0.2);
             color: #fff;
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
         }
-
     </style>
 </head>
+
 <body>
-    
+
     <div id="sync-status">Wait...</div>
 
     <div class="clock-wrapper">
         <div id="main-time">00:00</div>
         <div id="seconds">00</div>
     </div>
-    
+
     <div id="date">Loading...</div>
 
     <div class="controls">
@@ -146,7 +148,7 @@
     <script>
         let is24Hour = false;
         let timeOffset = 0; // The difference between local time and IST server time
-        
+
         const timeEl = document.getElementById('main-time');
         const secEl = document.getElementById('seconds');
         const dateEl = document.getElementById('date');
@@ -162,15 +164,15 @@
                 // Fetching time for Kolkata
                 const response = await fetch('https://worldtimeapi.org/api/timezone/Asia/Kolkata');
                 const data = await response.json();
-                
+
                 // Calculate precise time from the API
                 // 'datetime' includes the timezone offset
                 const serverTime = new Date(data.datetime).getTime();
                 const localTime = new Date().getTime();
-                
+
                 // Calculate offset: Server - Local
                 timeOffset = serverTime - localTime;
-                
+
                 statusEl.innerText = "IST LIVE";
                 statusEl.style.color = "#004400"; // Dark green invisible mostly
             } catch (error) {
@@ -201,7 +203,7 @@
 
             if (!is24Hour) {
                 hours = hours % 12;
-                hours = hours ? hours : 12; 
+                hours = hours ? hours : 12;
             } else {
                 hours = String(hours).padStart(2, '0');
             }
@@ -230,11 +232,11 @@
 
         // Mouse hider logic
         let timeout;
-        document.onmousemove = function(){
+        document.onmousemove = function () {
             bodyEl.style.cursor = "auto";
             document.querySelector('.controls').style.opacity = "1";
             clearTimeout(timeout);
-            timeout = setTimeout(function(){
+            timeout = setTimeout(function () {
                 bodyEl.style.cursor = "none";
                 document.querySelector('.controls').style.opacity = "0";
             }, 3000);
@@ -243,11 +245,12 @@
         // Start everything
         setInterval(updateClock, 1000);
         updateClock();
-        
+
         // Sync time immediately, then resync every 10 minutes to correct any drift
         syncTime();
-        setInterval(syncTime, 600000); 
+        setInterval(syncTime, 600000);
 
     </script>
 </body>
+
 </html>
