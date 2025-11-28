@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IST Precision Clock</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* 2. BASIC SETUP */
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000000;
+            color: #ffffff;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Outfit', sans-serif;
+            overflow: hidden;
+            cursor: none;
+            
+            /* Very subtle gradient */
+            background: radial-gradient(circle at center, #111111 0%, #000000 70%);
+        }
+
+        /* 3. CLOCK STYLING */
+        .clock-wrapper {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        #main-time {
+            font-size: 28vw;
+            font-weight: 700;
+            letter-spacing: -0.04em;
+            color: #ffffff;
+            font-variant-numeric: tabular-nums;
+            /* Glow */
+            text-shadow: 0 0 40px rgba(255, 255, 255, 0.2), 0 0 80px rgba(255, 255, 255, 0.1);
+        }
+
+        #seconds {
+            font-size: 6vw;
+            font-weight: 200;
+            color: #ffffff;
+            opacity: 0.4;
+            margin-left: 1.5vw;
+            font-variant-numeric: tabular-nums;
+            width: 8vw;
+            transform: translateY(-2vw);
+        }
+
+        #date {
+            font-size: 1.2vw;
+            font-weight: 200;
+            margin-top: 2vh;
+            color: rgba(255, 255, 255, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 0.8em;
+        }
+
+        /* Status indicator (Syncing vs Synced) */
+        #sync-status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 10px;
+            color: #333;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* 4. GLASS BUTTONS */
+        .controls {
+            position: absolute;
+            bottom: 40px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            display: flex;
+            gap: 15px;
+        }
+
+        body:hover .controls {
+            opacity: 1;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.6);
+            padding: 12px 24px;
+            cursor: pointer;
+            border-radius: 50px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+
+    </style>
+</head>
+<body>
+    
+    <div id="sync-status">Wait...</div>
+
+    <div class="clock-wrapper">
+        <div id="main-time">00:00</div>
+        <div id="seconds">00</div>
+    </div>
+    
+    <div id="date">Loading...</div>
+
+    <div class="controls">
+        <button onclick="toggleFormat()">12h / 24h</button>
+        <button onclick="toggleFullscreen()">Fullscreen</button>
+        <button onclick="forceSync()">Resync Time</button>
+    </div>
+
+    <script>
+        let is24Hour = false;
+        let timeOffset = 0; // The difference between local time and IST server time
+        
+        const timeEl = document.getElementById('main-time');
+        const secEl = document.getElementById('seconds');
+        const dateEl = document.getElementById('date');
+        const statusEl = document.getElementById('sync-status');
+        const bodyEl = document.body;
+
+        // 1. FETCH EXACT IST TIME
+        async function syncTime() {
+            statusEl.innerText = "Syncing...";
+            statusEl.style.color = "#888";
+
+            try {
+                // Fetching time for Kolkata
+                const response = await fetch('https://worldtimeapi.org/api/timezone/Asia/Kolkata');
+                const data = await response.json();
+                
+                // Calculate precise time from the API
+                // 'datetime' includes the timezone offset
+                const serverTime = new Date(data.datetime).getTime();
+                const localTime = new Date().getTime();
+                
+                // Calculate offset: Server - Local
+                timeOffset = serverTime - localTime;
+                
+                statusEl.innerText = "IST LIVE";
+                statusEl.style.color = "#004400"; // Dark green invisible mostly
+            } catch (error) {
+                console.error("Sync failed, using system time", error);
+                statusEl.innerText = "OFFLINE MODE";
+                statusEl.style.color = "#550000";
+                // If fetch fails, offset remains what it was (or 0)
+            }
+        }
+
+        function forceSync() {
+            syncTime();
+        }
+
+        // 2. CLOCK TICK (Runs every second)
+        function updateClock() {
+            // Get current local time + the offset we calculated from internet
+            const adjustedNow = new Date(new Date().getTime() + timeOffset);
+
+            // FORCE IST TIMEZONE DISPLAY
+            // This ensures that even if adjustedNow is correct, we extract the hours/mins specifically for India
+            const istString = adjustedNow.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+            const nowIST = new Date(istString);
+
+            let hours = nowIST.getHours();
+            const minutes = String(nowIST.getMinutes()).padStart(2, '0');
+            const seconds = String(nowIST.getSeconds()).padStart(2, '0');
+
+            if (!is24Hour) {
+                hours = hours % 12;
+                hours = hours ? hours : 12; 
+            } else {
+                hours = String(hours).padStart(2, '0');
+            }
+
+            timeEl.innerText = `${hours}:${minutes}`;
+            secEl.innerText = seconds;
+
+            const options = { weekday: 'long', month: 'long', day: 'numeric', timeZone: "Asia/Kolkata" };
+            dateEl.innerText = adjustedNow.toLocaleDateString('en-IN', options);
+        }
+
+        function toggleFormat() {
+            is24Hour = !is24Hour;
+            updateClock();
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        // Mouse hider logic
+        let timeout;
+        document.onmousemove = function(){
+            bodyEl.style.cursor = "auto";
+            document.querySelector('.controls').style.opacity = "1";
+            clearTimeout(timeout);
+            timeout = setTimeout(function(){
+                bodyEl.style.cursor = "none";
+                document.querySelector('.controls').style.opacity = "0";
+            }, 3000);
+        }
+
+        // Start everything
+        setInterval(updateClock, 1000);
+        updateClock();
+        
+        // Sync time immediately, then resync every 10 minutes to correct any drift
+        syncTime();
+        setInterval(syncTime, 600000); 
+
+    </script>
+</body>
+</html>
