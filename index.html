@@ -126,10 +126,32 @@
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
         }
 
-        .spotify-panel {
+        .spotify-dock {
             position: absolute;
-            left: 20px;
-            bottom: 20px;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            z-index: 3;
+        }
+
+        .spotify-handle {
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            background: rgba(15, 15, 15, 0.9);
+            color: rgba(160, 255, 180, 0.92);
+            border: 1px solid rgba(88, 255, 118, 0.35);
+            border-right: none;
+            border-radius: 12px 0 0 12px;
+            padding: 12px 8px;
+            font-size: 10px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+
+        .spotify-panel {
             width: min(540px, 96vw);
             padding: 16px;
             border-radius: 18px;
@@ -137,6 +159,18 @@
             border: 1px solid rgba(255, 255, 255, 0.12);
             backdrop-filter: blur(16px);
             box-shadow: 0 15px 40px rgba(0, 0, 0, 0.45);
+            transform: translateX(calc(100% - 30px));
+            opacity: 0.25;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            max-height: 88vh;
+            overflow: auto;
+        }
+
+        .spotify-dock:hover .spotify-panel,
+        .spotify-dock:focus-within .spotify-panel,
+        .spotify-dock.open .spotify-panel {
+            transform: translateX(0);
+            opacity: 1;
         }
 
         .spotify-title {
@@ -239,53 +273,56 @@
         <button id="resync-btn" onclick="forceSync()">Resync Time</button>
     </div>
 
-    <div class="spotify-panel" aria-label="Spotify connect controls">
-        <div class="spotify-title">Spotify Connect Studio (control your desktop app)</div>
-        <div class="spotify-now">
-            <div id="spotify-now-track" class="spotify-now-track">No active track</div>
-            <div id="spotify-now-meta" class="spotify-now-meta">Log in and refresh player state.</div>
+    <div id="spotify-dock" class="spotify-dock">
+        <button id="spotify-toggle" class="spotify-handle" onclick="toggleSpotifyPanel()">Spotify</button>
+        <div class="spotify-panel" aria-label="Spotify connect controls">
+            <div class="spotify-title">Spotify Connect Studio (hover/focus to open)</div>
+            <div class="spotify-now">
+                <div id="spotify-now-track" class="spotify-now-track">No active track</div>
+                <div id="spotify-now-meta" class="spotify-now-meta">Log in and refresh player state.</div>
+            </div>
+            <div class="spotify-row">
+                <input id="spotify-client-id" placeholder="Spotify Client ID" />
+                <button class="spotify-mini-btn" onclick="saveClientId()">Save ID</button>
+            </div>
+            <div class="spotify-row">
+                <button class="spotify-mini-btn" onclick="spotifyLogin()">Login</button>
+                <button class="spotify-mini-btn" onclick="spotifyLogout()">Logout</button>
+                <button class="spotify-mini-btn" onclick="refreshPlayerState()">Refresh State</button>
+            </div>
+            <div class="spotify-section-label">Device & playback</div>
+            <div class="spotify-row">
+                <select id="spotify-device-select">
+                    <option value="">Select device</option>
+                </select>
+                <button class="spotify-mini-btn" onclick="loadDevices()">Devices</button>
+            </div>
+            <div class="spotify-row">
+                <button class="spotify-mini-btn" onclick="spotifyPrevious()">Prev</button>
+                <button class="spotify-mini-btn primary" onclick="spotifyTogglePlayPause()">Play/Pause</button>
+                <button class="spotify-mini-btn" onclick="spotifyNext()">Next</button>
+            </div>
+            <div class="spotify-section-label">Play a playlist</div>
+            <div class="spotify-row">
+                <select id="spotify-playlist-select">
+                    <option value="">Select playlist</option>
+                </select>
+                <button class="spotify-mini-btn" onclick="loadPlaylists()">Load</button>
+                <button class="spotify-mini-btn primary" onclick="playSelectedPlaylist()">Play Playlist</button>
+            </div>
+            <div class="spotify-section-label">Search and play song</div>
+            <div class="spotify-row">
+                <input id="spotify-search-input" placeholder="Search song or artist" />
+                <button class="spotify-mini-btn" onclick="searchTracks()">Search</button>
+            </div>
+            <div class="spotify-row">
+                <select id="spotify-track-select">
+                    <option value="">Select song</option>
+                </select>
+                <button class="spotify-mini-btn primary" onclick="playSelectedTrack()">Play Song</button>
+            </div>
+            <div id="spotify-status" class="spotify-status">Not logged in</div>
         </div>
-        <div class="spotify-row">
-            <input id="spotify-client-id" placeholder="Spotify Client ID" />
-            <button class="spotify-mini-btn" onclick="saveClientId()">Save ID</button>
-        </div>
-        <div class="spotify-row">
-            <button class="spotify-mini-btn" onclick="spotifyLogin()">Login</button>
-            <button class="spotify-mini-btn" onclick="spotifyLogout()">Logout</button>
-            <button class="spotify-mini-btn" onclick="refreshPlayerState()">Refresh State</button>
-        </div>
-        <div class="spotify-section-label">Device & playback</div>
-        <div class="spotify-row">
-            <select id="spotify-device-select">
-                <option value="">Select device</option>
-            </select>
-            <button class="spotify-mini-btn" onclick="loadDevices()">Devices</button>
-        </div>
-        <div class="spotify-row">
-            <button class="spotify-mini-btn" onclick="spotifyPrevious()">Prev</button>
-            <button class="spotify-mini-btn primary" onclick="spotifyTogglePlayPause()">Play/Pause</button>
-            <button class="spotify-mini-btn" onclick="spotifyNext()">Next</button>
-        </div>
-        <div class="spotify-section-label">Play a playlist</div>
-        <div class="spotify-row">
-            <select id="spotify-playlist-select">
-                <option value="">Select playlist</option>
-            </select>
-            <button class="spotify-mini-btn" onclick="loadPlaylists()">Load</button>
-            <button class="spotify-mini-btn primary" onclick="playSelectedPlaylist()">Play Playlist</button>
-        </div>
-        <div class="spotify-section-label">Search and play song</div>
-        <div class="spotify-row">
-            <input id="spotify-search-input" placeholder="Search song or artist" />
-            <button class="spotify-mini-btn" onclick="searchTracks()">Search</button>
-        </div>
-        <div class="spotify-row">
-            <select id="spotify-track-select">
-                <option value="">Select song</option>
-            </select>
-            <button class="spotify-mini-btn primary" onclick="playSelectedTrack()">Play Song</button>
-        </div>
-        <div id="spotify-status" class="spotify-status">Not logged in</div>
     </div>
 
     <script>
@@ -300,6 +337,7 @@
         const bodyEl = document.body;
         const syncButton = document.getElementById('resync-btn');
         const spotifyClientIdEl = document.getElementById('spotify-client-id');
+        const spotifyDockEl = document.getElementById('spotify-dock');
         const spotifyDeviceSelectEl = document.getElementById('spotify-device-select');
         const spotifyPlaylistSelectEl = document.getElementById('spotify-playlist-select');
         const spotifyTrackSelectEl = document.getElementById('spotify-track-select');
@@ -317,7 +355,9 @@
             'user-read-playback-state',
             'user-modify-playback-state',
             'user-read-currently-playing',
-            'playlist-read-private'
+            'playlist-read-private',
+            'playlist-read-collaborative',
+            'user-read-private'
         ].join(' ');
 
         const timeFormatter24 = new Intl.DateTimeFormat('en-IN', {
@@ -335,6 +375,12 @@
         });
 
         spotifyClientIdEl.value = localStorage.getItem(SPOTIFY_CLIENT_ID_KEY) || '';
+        spotifySearchInputEl.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                searchTracks();
+            }
+        });
 
         // 1. FETCH EXACT IST TIME
         async function syncTime() {
@@ -425,6 +471,10 @@
             }
             localStorage.setItem(SPOTIFY_CLIENT_ID_KEY, clientId);
             spotifyStatusEl.innerText = "Client ID saved.";
+        }
+
+        function toggleSpotifyPanel() {
+            spotifyDockEl.classList.toggle('open');
         }
 
         function spotifyLogout() {
@@ -555,6 +605,7 @@
                     option.value = device.id;
                     option.innerText = `${device.name}${device.is_active ? ' (Active)' : ''}`;
                     spotifyDeviceSelectEl.appendChild(option);
+                    if (device.is_active) spotifyDeviceSelectEl.value = device.id;
                 });
                 spotifyStatusEl.innerText = devices.length
                     ? "Devices loaded. Pick your desktop Spotify device."
@@ -566,8 +617,13 @@
 
         async function loadPlaylists() {
             try {
-                const data = await spotifyApi('/me/playlists?limit=50');
-                const playlists = data?.items || [];
+                let nextPath = '/me/playlists?limit=50';
+                const playlists = [];
+                while (nextPath && playlists.length < 200) {
+                    const data = await spotifyApi(nextPath);
+                    playlists.push(...(data?.items || []));
+                    nextPath = data?.next ? data.next.replace('https://api.spotify.com/v1', '') : null;
+                }
                 spotifyPlaylistSelectEl.innerHTML = '<option value="">Select playlist</option>';
                 playlists.forEach((playlist) => {
                     const option = document.createElement('option');
@@ -590,7 +646,7 @@
                 return;
             }
             try {
-                const data = await spotifyApi(`/search?type=track&limit=25&q=${encodeURIComponent(query)}`);
+                const data = await spotifyApi(`/search?type=track&limit=25&market=from_token&q=${encodeURIComponent(query)}`);
                 const tracks = data?.tracks?.items || [];
                 spotifyTrackSelectEl.innerHTML = '<option value="">Select song</option>';
                 tracks.forEach((track) => {
@@ -609,7 +665,9 @@
         }
 
         function selectedDeviceId() {
-            return spotifyDeviceSelectEl.value || undefined;
+            if (spotifyDeviceSelectEl.value) return spotifyDeviceSelectEl.value;
+            const activeDeviceOption = Array.from(spotifyDeviceSelectEl.options).find((option) => option.text.includes('(Active)'));
+            return activeDeviceOption?.value || undefined;
         }
 
         async function spotifyTransferIfNeeded() {
