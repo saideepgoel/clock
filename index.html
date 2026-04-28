@@ -130,20 +130,21 @@
             position: absolute;
             left: 20px;
             bottom: 20px;
-            width: min(420px, 94vw);
-            padding: 14px;
-            border-radius: 14px;
-            background: rgba(10, 10, 10, 0.75);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(12px);
+            width: min(540px, 96vw);
+            padding: 16px;
+            border-radius: 18px;
+            background: linear-gradient(160deg, rgba(26, 26, 26, 0.82), rgba(9, 9, 9, 0.9));
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(16px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.45);
         }
 
         .spotify-title {
-            font-size: 11px;
+            font-size: 12px;
             letter-spacing: 1px;
             text-transform: uppercase;
-            color: rgba(255, 255, 255, 0.7);
-            margin-bottom: 10px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 12px;
         }
 
         .spotify-row {
@@ -178,11 +179,45 @@
             text-overflow: ellipsis;
         }
 
+        .spotify-now {
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            margin-bottom: 8px;
+            min-height: 56px;
+        }
+
+        .spotify-now-track {
+            font-size: 13px;
+            color: #fff;
+            margin-bottom: 3px;
+        }
+
+        .spotify-now-meta {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.65);
+        }
+
+        .spotify-section-label {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.56);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 4px 0;
+        }
+
         .spotify-mini-btn {
             width: 100%;
             padding: 8px 10px;
             font-size: 11px;
             border-radius: 8px;
+        }
+
+        .spotify-mini-btn.primary {
+            color: #d3ffd9;
+            border-color: rgba(88, 255, 118, 0.35);
+            background: rgba(36, 180, 69, 0.25);
         }
     </style>
 </head>
@@ -205,7 +240,11 @@
     </div>
 
     <div class="spotify-panel" aria-label="Spotify connect controls">
-        <div class="spotify-title">Spotify Connect (control your desktop app)</div>
+        <div class="spotify-title">Spotify Connect Studio (control your desktop app)</div>
+        <div class="spotify-now">
+            <div id="spotify-now-track" class="spotify-now-track">No active track</div>
+            <div id="spotify-now-meta" class="spotify-now-meta">Log in and refresh player state.</div>
+        </div>
         <div class="spotify-row">
             <input id="spotify-client-id" placeholder="Spotify Client ID" />
             <button class="spotify-mini-btn" onclick="saveClientId()">Save ID</button>
@@ -213,17 +252,38 @@
         <div class="spotify-row">
             <button class="spotify-mini-btn" onclick="spotifyLogin()">Login</button>
             <button class="spotify-mini-btn" onclick="spotifyLogout()">Logout</button>
-            <button class="spotify-mini-btn" onclick="loadDevices()">Refresh Devices</button>
+            <button class="spotify-mini-btn" onclick="refreshPlayerState()">Refresh State</button>
         </div>
+        <div class="spotify-section-label">Device & playback</div>
         <div class="spotify-row">
             <select id="spotify-device-select">
                 <option value="">Select device</option>
             </select>
+            <button class="spotify-mini-btn" onclick="loadDevices()">Devices</button>
         </div>
         <div class="spotify-row">
             <button class="spotify-mini-btn" onclick="spotifyPrevious()">Prev</button>
-            <button class="spotify-mini-btn" onclick="spotifyTogglePlayPause()">Play/Pause</button>
+            <button class="spotify-mini-btn primary" onclick="spotifyTogglePlayPause()">Play/Pause</button>
             <button class="spotify-mini-btn" onclick="spotifyNext()">Next</button>
+        </div>
+        <div class="spotify-section-label">Play a playlist</div>
+        <div class="spotify-row">
+            <select id="spotify-playlist-select">
+                <option value="">Select playlist</option>
+            </select>
+            <button class="spotify-mini-btn" onclick="loadPlaylists()">Load</button>
+            <button class="spotify-mini-btn primary" onclick="playSelectedPlaylist()">Play Playlist</button>
+        </div>
+        <div class="spotify-section-label">Search and play song</div>
+        <div class="spotify-row">
+            <input id="spotify-search-input" placeholder="Search song or artist" />
+            <button class="spotify-mini-btn" onclick="searchTracks()">Search</button>
+        </div>
+        <div class="spotify-row">
+            <select id="spotify-track-select">
+                <option value="">Select song</option>
+            </select>
+            <button class="spotify-mini-btn primary" onclick="playSelectedTrack()">Play Song</button>
         </div>
         <div id="spotify-status" class="spotify-status">Not logged in</div>
     </div>
@@ -241,7 +301,12 @@
         const syncButton = document.getElementById('resync-btn');
         const spotifyClientIdEl = document.getElementById('spotify-client-id');
         const spotifyDeviceSelectEl = document.getElementById('spotify-device-select');
+        const spotifyPlaylistSelectEl = document.getElementById('spotify-playlist-select');
+        const spotifyTrackSelectEl = document.getElementById('spotify-track-select');
+        const spotifySearchInputEl = document.getElementById('spotify-search-input');
         const spotifyStatusEl = document.getElementById('spotify-status');
+        const spotifyNowTrackEl = document.getElementById('spotify-now-track');
+        const spotifyNowMetaEl = document.getElementById('spotify-now-meta');
 
         const SPOTIFY_CLIENT_ID_KEY = 'spotify_client_id';
         const SPOTIFY_ACCESS_TOKEN_KEY = 'spotify_access_token';
@@ -251,7 +316,8 @@
         const SPOTIFY_SCOPES = [
             'user-read-playback-state',
             'user-modify-playback-state',
-            'user-read-currently-playing'
+            'user-read-currently-playing',
+            'playlist-read-private'
         ].join(' ');
 
         const timeFormatter24 = new Intl.DateTimeFormat('en-IN', {
@@ -366,6 +432,8 @@
             localStorage.removeItem(SPOTIFY_REFRESH_TOKEN_KEY);
             localStorage.removeItem(SPOTIFY_TOKEN_EXP_KEY);
             spotifyStatusEl.innerText = "Logged out from Spotify.";
+            spotifyNowTrackEl.innerText = "No active track";
+            spotifyNowMetaEl.innerText = "Log in and refresh player state.";
         }
 
         function getSpotifyToken() {
@@ -496,6 +564,50 @@
             }
         }
 
+        async function loadPlaylists() {
+            try {
+                const data = await spotifyApi('/me/playlists?limit=50');
+                const playlists = data?.items || [];
+                spotifyPlaylistSelectEl.innerHTML = '<option value="">Select playlist</option>';
+                playlists.forEach((playlist) => {
+                    const option = document.createElement('option');
+                    option.value = playlist.uri;
+                    option.innerText = `${playlist.name} (${playlist.tracks.total})`;
+                    spotifyPlaylistSelectEl.appendChild(option);
+                });
+                spotifyStatusEl.innerText = playlists.length
+                    ? "Playlists loaded."
+                    : "No playlists available on this account.";
+            } catch (error) {
+                spotifyStatusEl.innerText = `Playlist load failed: ${error.message}`;
+            }
+        }
+
+        async function searchTracks() {
+            const query = spotifySearchInputEl.value.trim();
+            if (!query) {
+                spotifyStatusEl.innerText = "Enter a song or artist to search.";
+                return;
+            }
+            try {
+                const data = await spotifyApi(`/search?type=track&limit=25&q=${encodeURIComponent(query)}`);
+                const tracks = data?.tracks?.items || [];
+                spotifyTrackSelectEl.innerHTML = '<option value="">Select song</option>';
+                tracks.forEach((track) => {
+                    const option = document.createElement('option');
+                    option.value = track.uri;
+                    const artistNames = (track.artists || []).map((artist) => artist.name).join(', ');
+                    option.innerText = `${track.name} — ${artistNames}`;
+                    spotifyTrackSelectEl.appendChild(option);
+                });
+                spotifyStatusEl.innerText = tracks.length
+                    ? `Found ${tracks.length} songs.`
+                    : "No songs found for that search.";
+            } catch (error) {
+                spotifyStatusEl.innerText = `Search failed: ${error.message}`;
+            }
+        }
+
         function selectedDeviceId() {
             return spotifyDeviceSelectEl.value || undefined;
         }
@@ -506,11 +618,68 @@
             await spotifyApi('/me/player', 'PUT', { device_ids: [deviceId], play: false });
         }
 
+        function withDeviceQuery() {
+            const deviceId = selectedDeviceId();
+            return deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
+        }
+
+        async function playSelectedPlaylist() {
+            const playlistUri = spotifyPlaylistSelectEl.value;
+            if (!playlistUri) {
+                spotifyStatusEl.innerText = "Select a playlist first.";
+                return;
+            }
+            try {
+                await spotifyTransferIfNeeded();
+                await spotifyApi(`/me/player/play${withDeviceQuery()}`, 'PUT', { context_uri: playlistUri });
+                spotifyStatusEl.innerText = "Playlist play command sent.";
+                await refreshPlayerState();
+            } catch (error) {
+                spotifyStatusEl.innerText = `Play playlist failed: ${error.message}`;
+            }
+        }
+
+        async function playSelectedTrack() {
+            const trackUri = spotifyTrackSelectEl.value;
+            if (!trackUri) {
+                spotifyStatusEl.innerText = "Select a song first.";
+                return;
+            }
+            try {
+                await spotifyTransferIfNeeded();
+                await spotifyApi(`/me/player/play${withDeviceQuery()}`, 'PUT', { uris: [trackUri] });
+                spotifyStatusEl.innerText = "Song play command sent.";
+                await refreshPlayerState();
+            } catch (error) {
+                spotifyStatusEl.innerText = `Play song failed: ${error.message}`;
+            }
+        }
+
+        async function refreshPlayerState() {
+            try {
+                const state = await spotifyApi('/me/player');
+                const item = state?.item;
+                if (!item) {
+                    spotifyNowTrackEl.innerText = "No active track";
+                    spotifyNowMetaEl.innerText = "Start music in Spotify app, then refresh.";
+                    spotifyStatusEl.innerText = "Player state fetched.";
+                    return;
+                }
+                const artists = (item.artists || []).map((artist) => artist.name).join(', ');
+                spotifyNowTrackEl.innerText = `${item.name}`;
+                spotifyNowMetaEl.innerText = `${artists} • ${state?.device?.name || 'Unknown device'} • ${state?.is_playing ? 'Playing' : 'Paused'}`;
+                spotifyStatusEl.innerText = "Player state fetched.";
+            } catch (error) {
+                spotifyStatusEl.innerText = `State fetch failed: ${error.message}`;
+            }
+        }
+
         async function spotifyPrevious() {
             try {
                 await spotifyTransferIfNeeded();
-                await spotifyApi(`/me/player/previous${selectedDeviceId() ? `?device_id=${encodeURIComponent(selectedDeviceId())}` : ''}`, 'POST');
+                await spotifyApi(`/me/player/previous${withDeviceQuery()}`, 'POST');
                 spotifyStatusEl.innerText = "Previous track command sent.";
+                await refreshPlayerState();
             } catch (error) {
                 spotifyStatusEl.innerText = `Prev failed: ${error.message}`;
             }
@@ -519,8 +688,9 @@
         async function spotifyNext() {
             try {
                 await spotifyTransferIfNeeded();
-                await spotifyApi(`/me/player/next${selectedDeviceId() ? `?device_id=${encodeURIComponent(selectedDeviceId())}` : ''}`, 'POST');
+                await spotifyApi(`/me/player/next${withDeviceQuery()}`, 'POST');
                 spotifyStatusEl.innerText = "Next track command sent.";
+                await refreshPlayerState();
             } catch (error) {
                 spotifyStatusEl.innerText = `Next failed: ${error.message}`;
             }
@@ -532,9 +702,9 @@
                 const state = await spotifyApi('/me/player');
                 const currentlyPlaying = !!state?.is_playing;
                 const action = currentlyPlaying ? 'pause' : 'play';
-                const query = selectedDeviceId() ? `?device_id=${encodeURIComponent(selectedDeviceId())}` : '';
-                await spotifyApi(`/me/player/${action}${query}`, 'PUT');
+                await spotifyApi(`/me/player/${action}${withDeviceQuery()}`, 'PUT');
                 spotifyStatusEl.innerText = currentlyPlaying ? "Pause command sent." : "Play command sent.";
+                await refreshPlayerState();
             } catch (error) {
                 spotifyStatusEl.innerText = `Play/Pause failed: ${error.message}`;
             }
@@ -567,9 +737,17 @@
                 const ok = await exchangeCodeForToken(code);
                 const cleanUrl = window.location.origin + window.location.pathname;
                 window.history.replaceState({}, '', cleanUrl);
-                spotifyStatusEl.innerText = ok ? "Spotify login successful. Load devices." : "Spotify login failed.";
+                if (ok) {
+                    spotifyStatusEl.innerText = "Spotify login successful. Load devices/playlists.";
+                    await loadDevices();
+                    await loadPlaylists();
+                    await refreshPlayerState();
+                } else {
+                    spotifyStatusEl.innerText = "Spotify login failed.";
+                }
             } else if (await refreshSpotifyTokenIfNeeded()) {
                 spotifyStatusEl.innerText = "Spotify ready. Load devices to control your PC playback.";
+                await loadDevices();
             }
         })();
 
