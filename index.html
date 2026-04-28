@@ -125,6 +125,26 @@
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
         }
+
+        .spotify-embed {
+            position: absolute;
+            left: 20px;
+            bottom: 20px;
+            width: min(360px, 92vw);
+            opacity: 0.7;
+            transition: opacity 0.3s ease;
+        }
+
+        .spotify-embed:hover {
+            opacity: 1;
+        }
+
+        .spotify-embed iframe {
+            width: 100%;
+            height: 152px;
+            border: 0;
+            border-radius: 12px;
+        }
     </style>
 </head>
 
@@ -142,64 +162,93 @@
     <div class="controls">
         <button onclick="toggleFormat()">12h / 24h</button>
         <button onclick="toggleFullscreen()">Fullscreen</button>
-        <button onclick="forceSync()">Resync Time</button>
+        <button id="resync-btn" onclick="forceSync()">Resync Time</button>
+    </div>
+
+    <div class="spotify-embed" aria-label="Spotify player">
+        <iframe src="https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M?utm_source=generator"
+            allowfullscreen="" loading="lazy"
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
     </div>
 
     <script>
         let is24Hour = false;
         let timeOffset = 0; // The difference between local time and IST server time
+        let syncInProgress = false;
 
         const timeEl = document.getElementById('main-time');
         const secEl = document.getElementById('seconds');
         const dateEl = document.getElementById('date');
         const statusEl = document.getElementById('sync-status');
         const bodyEl = document.body;
+        const syncButton = document.getElementById('resync-btn');
+
+        const timeFormatter24 = new Intl.DateTimeFormat('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
+        const dateFormatter = new Intl.DateTimeFormat('en-IN', {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+            timeZone: 'Asia/Kolkata'
+        });
 
         // 1. FETCH EXACT IST TIME
         async function syncTime() {
+            if (syncInProgress) return;
+            syncInProgress = true;
+            syncButton.disabled = true;
             statusEl.innerText = "Syncing...";
             statusEl.style.color = "#888";
 
             try {
-                // Fetching time for Kolkata
-                const response = await fetch('https://worldtimeapi.org/api/timezone/Asia/Kolkata');
+                const requestStartedAt = Date.now();
+                const response = await fetch('https://worldtimeapi.org/api/timezone/Asia/Kolkata', {
+                    cache: 'no-store'
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
+                const requestEndedAt = Date.now();
 
-                // Calculate precise time from the API
-                // 'datetime' includes the timezone offset
-                const serverTime = new Date(data.datetime).getTime();
-                const localTime = new Date().getTime();
+                const serverUnix = Number(data.unixtime);
+                if (!Number.isFinite(serverUnix)) throw new Error("Invalid unixtime payload");
+                const serverTime = (serverUnix * 1000) + Math.round((requestEndedAt - requestStartedAt) / 2);
 
                 // Calculate offset: Server - Local
-                timeOffset = serverTime - localTime;
+                timeOffset = serverTime - requestEndedAt;
 
                 statusEl.innerText = "IST LIVE";
                 statusEl.style.color = "#004400"; // Dark green invisible mostly
+                updateClock();
             } catch (error) {
                 console.error("Sync failed, using system time", error);
                 statusEl.innerText = "OFFLINE MODE";
                 statusEl.style.color = "#550000";
                 // If fetch fails, offset remains what it was (or 0)
+            } finally {
+                syncInProgress = false;
+                syncButton.disabled = false;
             }
         }
 
-        function forceSync() {
-            syncTime();
+        async function forceSync() {
+            await syncTime();
         }
 
         // 2. CLOCK TICK (Runs every second)
         function updateClock() {
             // Get current local time + the offset we calculated from internet
-            const adjustedNow = new Date(new Date().getTime() + timeOffset);
+            const adjustedNow = new Date(Date.now() + timeOffset);
+            const parts = timeFormatter24.formatToParts(adjustedNow);
+            const getPart = (type) => parts.find((part) => part.type === type)?.value || "00";
 
-            // FORCE IST TIMEZONE DISPLAY
-            // This ensures that even if adjustedNow is correct, we extract the hours/mins specifically for India
-            const istString = adjustedNow.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
-            const nowIST = new Date(istString);
-
-            let hours = nowIST.getHours();
-            const minutes = String(nowIST.getMinutes()).padStart(2, '0');
-            const seconds = String(nowIST.getSeconds()).padStart(2, '0');
+            let hours = Number(getPart('hour'));
+            const minutes = getPart('minute');
+            const seconds = getPart('second');
 
             if (!is24Hour) {
                 hours = hours % 12;
@@ -211,8 +260,7 @@
             timeEl.innerText = `${hours}:${minutes}`;
             secEl.innerText = seconds;
 
-            const options = { weekday: 'long', month: 'long', day: 'numeric', timeZone: "Asia/Kolkata" };
-            dateEl.innerText = adjustedNow.toLocaleDateString('en-IN', options);
+            dateEl.innerText = dateFormatter.format(adjustedNow);
         }
 
         function toggleFormat() {
