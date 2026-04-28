@@ -126,24 +126,63 @@
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
         }
 
-        .spotify-embed {
+        .spotify-panel {
             position: absolute;
             left: 20px;
             bottom: 20px;
-            width: min(360px, 92vw);
-            opacity: 0.7;
-            transition: opacity 0.3s ease;
+            width: min(420px, 94vw);
+            padding: 14px;
+            border-radius: 14px;
+            background: rgba(10, 10, 10, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
         }
 
-        .spotify-embed:hover {
-            opacity: 1;
+        .spotify-title {
+            font-size: 11px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 10px;
         }
 
-        .spotify-embed iframe {
+        .spotify-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .spotify-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .spotify-panel input,
+        .spotify-panel select {
+            flex: 1;
+            min-width: 0;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #fff;
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            padding: 8px 10px;
+            font-size: 12px;
+        }
+
+        .spotify-status {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.75);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .spotify-mini-btn {
             width: 100%;
-            height: 152px;
-            border: 0;
-            border-radius: 12px;
+            padding: 8px 10px;
+            font-size: 11px;
+            border-radius: 8px;
         }
     </style>
 </head>
@@ -165,10 +204,28 @@
         <button id="resync-btn" onclick="forceSync()">Resync Time</button>
     </div>
 
-    <div class="spotify-embed" aria-label="Spotify player">
-        <iframe src="https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M?utm_source=generator"
-            allowfullscreen="" loading="lazy"
-            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
+    <div class="spotify-panel" aria-label="Spotify connect controls">
+        <div class="spotify-title">Spotify Connect (control your desktop app)</div>
+        <div class="spotify-row">
+            <input id="spotify-client-id" placeholder="Spotify Client ID" />
+            <button class="spotify-mini-btn" onclick="saveClientId()">Save ID</button>
+        </div>
+        <div class="spotify-row">
+            <button class="spotify-mini-btn" onclick="spotifyLogin()">Login</button>
+            <button class="spotify-mini-btn" onclick="spotifyLogout()">Logout</button>
+            <button class="spotify-mini-btn" onclick="loadDevices()">Refresh Devices</button>
+        </div>
+        <div class="spotify-row">
+            <select id="spotify-device-select">
+                <option value="">Select device</option>
+            </select>
+        </div>
+        <div class="spotify-row">
+            <button class="spotify-mini-btn" onclick="spotifyPrevious()">Prev</button>
+            <button class="spotify-mini-btn" onclick="spotifyTogglePlayPause()">Play/Pause</button>
+            <button class="spotify-mini-btn" onclick="spotifyNext()">Next</button>
+        </div>
+        <div id="spotify-status" class="spotify-status">Not logged in</div>
     </div>
 
     <script>
@@ -182,6 +239,20 @@
         const statusEl = document.getElementById('sync-status');
         const bodyEl = document.body;
         const syncButton = document.getElementById('resync-btn');
+        const spotifyClientIdEl = document.getElementById('spotify-client-id');
+        const spotifyDeviceSelectEl = document.getElementById('spotify-device-select');
+        const spotifyStatusEl = document.getElementById('spotify-status');
+
+        const SPOTIFY_CLIENT_ID_KEY = 'spotify_client_id';
+        const SPOTIFY_ACCESS_TOKEN_KEY = 'spotify_access_token';
+        const SPOTIFY_REFRESH_TOKEN_KEY = 'spotify_refresh_token';
+        const SPOTIFY_TOKEN_EXP_KEY = 'spotify_token_exp';
+        const SPOTIFY_PKCE_VERIFIER_KEY = 'spotify_pkce_verifier';
+        const SPOTIFY_SCOPES = [
+            'user-read-playback-state',
+            'user-modify-playback-state',
+            'user-read-currently-playing'
+        ].join(' ');
 
         const timeFormatter24 = new Intl.DateTimeFormat('en-IN', {
             timeZone: 'Asia/Kolkata',
@@ -196,6 +267,8 @@
             day: 'numeric',
             timeZone: 'Asia/Kolkata'
         });
+
+        spotifyClientIdEl.value = localStorage.getItem(SPOTIFY_CLIENT_ID_KEY) || '';
 
         // 1. FETCH EXACT IST TIME
         async function syncTime() {
@@ -278,6 +351,195 @@
             }
         }
 
+        function saveClientId() {
+            const clientId = spotifyClientIdEl.value.trim();
+            if (!clientId) {
+                spotifyStatusEl.innerText = "Enter your Spotify Client ID first.";
+                return;
+            }
+            localStorage.setItem(SPOTIFY_CLIENT_ID_KEY, clientId);
+            spotifyStatusEl.innerText = "Client ID saved.";
+        }
+
+        function spotifyLogout() {
+            localStorage.removeItem(SPOTIFY_ACCESS_TOKEN_KEY);
+            localStorage.removeItem(SPOTIFY_REFRESH_TOKEN_KEY);
+            localStorage.removeItem(SPOTIFY_TOKEN_EXP_KEY);
+            spotifyStatusEl.innerText = "Logged out from Spotify.";
+        }
+
+        function getSpotifyToken() {
+            return localStorage.getItem(SPOTIFY_ACCESS_TOKEN_KEY);
+        }
+
+        function isTokenValid() {
+            const exp = Number(localStorage.getItem(SPOTIFY_TOKEN_EXP_KEY) || 0);
+            return !!getSpotifyToken() && Date.now() < exp;
+        }
+
+        function createVerifier() {
+            const array = new Uint8Array(32);
+            crypto.getRandomValues(array);
+            return btoa(String.fromCharCode(...array)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        async function createChallenge(verifier) {
+            const data = new TextEncoder().encode(verifier);
+            const digest = await crypto.subtle.digest('SHA-256', data);
+            const bytes = new Uint8Array(digest);
+            return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        async function spotifyLogin() {
+            const clientId = (localStorage.getItem(SPOTIFY_CLIENT_ID_KEY) || spotifyClientIdEl.value).trim();
+            if (!clientId) {
+                spotifyStatusEl.innerText = "Set your Spotify Client ID, then login.";
+                return;
+            }
+            const verifier = createVerifier();
+            const challenge = await createChallenge(verifier);
+            localStorage.setItem(SPOTIFY_PKCE_VERIFIER_KEY, verifier);
+            const params = new URLSearchParams({
+                client_id: clientId,
+                response_type: 'code',
+                redirect_uri: window.location.origin + window.location.pathname,
+                code_challenge_method: 'S256',
+                code_challenge: challenge,
+                scope: SPOTIFY_SCOPES
+            });
+            window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
+        }
+
+        async function exchangeCodeForToken(code) {
+            const clientId = localStorage.getItem(SPOTIFY_CLIENT_ID_KEY);
+            const verifier = localStorage.getItem(SPOTIFY_PKCE_VERIFIER_KEY);
+            if (!clientId || !verifier) return false;
+            const body = new URLSearchParams({
+                grant_type: 'authorization_code',
+                code,
+                redirect_uri: window.location.origin + window.location.pathname,
+                client_id: clientId,
+                code_verifier: verifier
+            });
+            const response = await fetch('https://accounts.spotify.com/api/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            });
+            if (!response.ok) return false;
+            const token = await response.json();
+            localStorage.setItem(SPOTIFY_ACCESS_TOKEN_KEY, token.access_token);
+            localStorage.setItem(SPOTIFY_REFRESH_TOKEN_KEY, token.refresh_token || '');
+            localStorage.setItem(SPOTIFY_TOKEN_EXP_KEY, String(Date.now() + ((token.expires_in || 3600) - 30) * 1000));
+            localStorage.removeItem(SPOTIFY_PKCE_VERIFIER_KEY);
+            return true;
+        }
+
+        async function refreshSpotifyTokenIfNeeded() {
+            if (isTokenValid()) return true;
+            const refreshToken = localStorage.getItem(SPOTIFY_REFRESH_TOKEN_KEY);
+            const clientId = localStorage.getItem(SPOTIFY_CLIENT_ID_KEY);
+            if (!refreshToken || !clientId) return false;
+            const body = new URLSearchParams({
+                grant_type: 'refresh_token',
+                refresh_token: refreshToken,
+                client_id: clientId
+            });
+            const response = await fetch('https://accounts.spotify.com/api/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            });
+            if (!response.ok) return false;
+            const token = await response.json();
+            localStorage.setItem(SPOTIFY_ACCESS_TOKEN_KEY, token.access_token);
+            localStorage.setItem(SPOTIFY_TOKEN_EXP_KEY, String(Date.now() + ((token.expires_in || 3600) - 30) * 1000));
+            return true;
+        }
+
+        async function spotifyApi(path, method = 'GET', body = null) {
+            const tokenReady = await refreshSpotifyTokenIfNeeded();
+            if (!tokenReady) throw new Error('Login required');
+            const token = getSpotifyToken();
+            const response = await fetch(`https://api.spotify.com/v1${path}`, {
+                method,
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: body ? JSON.stringify(body) : undefined
+            });
+            if (!response.ok && response.status !== 204) {
+                const text = await response.text();
+                throw new Error(`Spotify API ${response.status}: ${text}`);
+            }
+            if (response.status === 204) return null;
+            return await response.json();
+        }
+
+        async function loadDevices() {
+            try {
+                const data = await spotifyApi('/me/player/devices');
+                const devices = data?.devices || [];
+                spotifyDeviceSelectEl.innerHTML = '<option value="">Select device</option>';
+                devices.forEach((device) => {
+                    const option = document.createElement('option');
+                    option.value = device.id;
+                    option.innerText = `${device.name}${device.is_active ? ' (Active)' : ''}`;
+                    spotifyDeviceSelectEl.appendChild(option);
+                });
+                spotifyStatusEl.innerText = devices.length
+                    ? "Devices loaded. Pick your desktop Spotify device."
+                    : "No active devices. Open Spotify app on your PC first.";
+            } catch (error) {
+                spotifyStatusEl.innerText = `Device load failed: ${error.message}`;
+            }
+        }
+
+        function selectedDeviceId() {
+            return spotifyDeviceSelectEl.value || undefined;
+        }
+
+        async function spotifyTransferIfNeeded() {
+            const deviceId = selectedDeviceId();
+            if (!deviceId) return;
+            await spotifyApi('/me/player', 'PUT', { device_ids: [deviceId], play: false });
+        }
+
+        async function spotifyPrevious() {
+            try {
+                await spotifyTransferIfNeeded();
+                await spotifyApi(`/me/player/previous${selectedDeviceId() ? `?device_id=${encodeURIComponent(selectedDeviceId())}` : ''}`, 'POST');
+                spotifyStatusEl.innerText = "Previous track command sent.";
+            } catch (error) {
+                spotifyStatusEl.innerText = `Prev failed: ${error.message}`;
+            }
+        }
+
+        async function spotifyNext() {
+            try {
+                await spotifyTransferIfNeeded();
+                await spotifyApi(`/me/player/next${selectedDeviceId() ? `?device_id=${encodeURIComponent(selectedDeviceId())}` : ''}`, 'POST');
+                spotifyStatusEl.innerText = "Next track command sent.";
+            } catch (error) {
+                spotifyStatusEl.innerText = `Next failed: ${error.message}`;
+            }
+        }
+
+        async function spotifyTogglePlayPause() {
+            try {
+                await spotifyTransferIfNeeded();
+                const state = await spotifyApi('/me/player');
+                const currentlyPlaying = !!state?.is_playing;
+                const action = currentlyPlaying ? 'pause' : 'play';
+                const query = selectedDeviceId() ? `?device_id=${encodeURIComponent(selectedDeviceId())}` : '';
+                await spotifyApi(`/me/player/${action}${query}`, 'PUT');
+                spotifyStatusEl.innerText = currentlyPlaying ? "Pause command sent." : "Play command sent.";
+            } catch (error) {
+                spotifyStatusEl.innerText = `Play/Pause failed: ${error.message}`;
+            }
+        }
+
         // Mouse hider logic
         let timeout;
         document.onmousemove = function () {
@@ -297,6 +559,19 @@
         // Sync time immediately, then resync every 10 minutes to correct any drift
         syncTime();
         setInterval(syncTime, 600000);
+
+        (async function bootstrapSpotifyAuth() {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            if (code) {
+                const ok = await exchangeCodeForToken(code);
+                const cleanUrl = window.location.origin + window.location.pathname;
+                window.history.replaceState({}, '', cleanUrl);
+                spotifyStatusEl.innerText = ok ? "Spotify login successful. Load devices." : "Spotify login failed.";
+            } else if (await refreshSpotifyTokenIfNeeded()) {
+                spotifyStatusEl.innerText = "Spotify ready. Load devices to control your PC playback.";
+            }
+        })();
 
     </script>
 </body>
